@@ -8,3 +8,6 @@ __pycache__/
 coverage.xml
 htmlcov/
 node_modules/
+
+# Resultados locais de execução
+evidencias/

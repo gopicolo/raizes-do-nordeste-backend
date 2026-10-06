@@ -56,6 +56,8 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+O arquivo `.env` da raiz é carregado automaticamente pela API, pelo Alembic e pelo seed. Variáveis já definidas no ambiente têm prioridade sobre o arquivo.
+
 ## Banco, migrations e seed
 
 O banco padrão é SQLite, gravado em `raizes.db`.
@@ -70,9 +72,12 @@ O seed cria duas unidades, quatro produtos, estoques, uma promoção e contas de
 | Perfil | E-mail | Senha |
 |---|---|---|
 | Cliente | `cliente@raizes.local` | `Cliente@123` |
+| Atendente | `atendente@raizes.local` | `Atendente@123` |
 | Gerente | `gerente@raizes.local` | `Gerente@123` |
 | Cozinha | `cozinha@raizes.local` | `Cozinha@123` |
 | Admin | `admin@raizes.local` | `Admin@123` |
+
+Ao repetir o seed em um banco existente, a conta ATENDENTE ausente é adicionada sem repor estoques nem duplicar os demais registros.
 
 As credenciais são somente para avaliação local. Em produção, devem ser substituídas.
 
@@ -94,6 +99,14 @@ Acesse o Swagger em http://127.0.0.1:8000/docs.
 6. Se aprovado, o pedido muda para `PAGO` e pode gerar pontos quando houver consentimento. Se recusado, muda para `PAGAMENTO_RECUSADO` e o estoque é devolvido.
 7. Cozinha/Gerência pode evoluir `PAGO -> EM_PREPARO -> PRONTO -> ENTREGUE`.
 8. Ações sensíveis são registradas em auditoria.
+
+## Cancelamento e resgate
+
+Envie `PATCH /pedidos/{id}/status` com `{"status":"CANCELADO"}`. Cliente e atendente podem cancelar o próprio pedido enquanto ele aguarda pagamento. Cozinha, gerente e administrador também podem cancelar pedidos nos estados `PAGO` e `EM_PREPARO`. Pedidos prontos, entregues, recusados ou já cancelados não aceitam esse cancelamento.
+
+O cancelamento devolve todos os itens ao estoque da unidade e registra a auditoria na mesma transação. Uma repetição não devolve estoque novamente, e um pedido cancelado não pode ser pago. Pagamento e cancelamento disputam a mesma transição de estado para evitar efeitos duplicados. O pagamento é um mock: não há cobrança nem estorno financeiro real.
+
+Envie `POST /fidelidade/resgatar` com `{"pontos":2}`. O resgate exige consentimento e uma quantidade inteira positiva, debita apenas a conta autenticada e responde com `pontosResgatados` e `saldoPontos`. Saldo insuficiente retorna 409; ausência de consentimento, 403. O débito é atômico e auditado. Neste MVP, o resgate é uma operação de pontos, sem catálogo de recompensas ou conversão monetária. Os pontos são concedidos no pagamento aprovado; cancelamentos posteriores não estornam esses pontos.
 
 ## Padrão de erro
 
@@ -124,11 +137,12 @@ Todas as falhas HTTP retornam JSON padronizado:
 | POST | `/pedidos` | CLIENTE/ATENDENTE | Criar pedido multicanal |
 | GET | `/pedidos` | JWT | Listar e filtrar por canal/status |
 | GET | `/pedidos/{id}` | JWT | Consultar pedido |
-| PATCH | `/pedidos/{id}/status` | COZINHA/GERENTE/ADMIN | Evoluir status |
+| PATCH | `/pedidos/{id}/status` | Equipe; cliente/atendente no próprio pedido pendente | Evoluir status ou cancelar |
 | POST | `/pagamentos/{id}/processar` | JWT autorizado | Processar pagamento mock |
 | GET | `/estoque/unidades/{id}` | JWT | Consultar saldo da unidade |
 | POST | `/estoque/movimentacoes` | GERENTE/ADMIN | Entrada/saída de estoque |
 | GET | `/fidelidade/saldo` | JWT | Consultar pontos/consentimento |
+| POST | `/fidelidade/resgatar` | JWT e consentimento | Resgatar pontos do próprio saldo |
 | GET | `/auditoria` | GERENTE/ADMIN | Consultar trilha de auditoria |
 
 ## Testes automatizados
@@ -146,7 +160,7 @@ $env:PYTHONPATH="."
 pytest -q
 ```
 
-A suíte contém **14 cenários** e cobre login, 401, 403, validação 422, criação de pedido, 404, estoque insuficiente 409, pagamento aprovado e recusado, fidelidade, auditoria, filtro por canal e atualização de status. A evidência da execução validada está em `evidencias/testes_pytest.txt`.
+A suíte contém **34 cenários** e cobre login, 401, 403, validação 422, criação de pedido, 404, estoque insuficiente 409, pagamento aprovado e recusado, fidelidade, auditoria, filtro por canal, cancelamento, concorrência, resgate de pontos, configuração do `.env` e seed idempotente.
 
 ## Postman
 
@@ -165,19 +179,6 @@ A suíte contém **14 cenários** e cobre login, 401, 403, validação 422, cria
 - Auditoria registra ações sensíveis, usuário, recurso e horário.
 - O projeto coleta apenas os dados pessoais mínimos para o MVP (nome e e-mail).
 - Para produção: usar PostgreSQL, gerenciador de segredos, HTTPS, política formal de retenção/anonimização, rotação de chaves e observabilidade centralizada.
-
-## Publicar no GitHub
-
-O script `scripts/publicar_github.ps1` cria um repositório público usando a conta autenticada no GitHub CLI e envia o histórico local. Execute após instalar e autenticar o `gh`:
-
-```powershell
-gh auth login
-.\scripts\publicar_github.ps1
-```
-
-Repositório deste projeto: https://github.com/gopicolo/raizes-do-nordeste-backend. A URL também consta no PDF/DOCX.
-
-A publicação inicial no GitHub contém a versão consolidada do projeto. O histórico local anterior foi preservado no diretório `.git` do pacote ZIP.
 
 ## Validação de carga e concorrência
 
@@ -198,3 +199,9 @@ npm install
 python scripts/validar_projeto.py --postman
 ```
 
+
+## Diagrama entidade-relacionamento
+
+![DER do banco de dados](docs/diagramas/der.png)
+
+O diagrama mostra as tabelas, chaves e relacionamentos implementados. `?` indica campo opcional; a combinação `(unidade_id, produto_id)` é única em `estoques`. A tabela `promocoes` é independente no MVP. As versões vetorial e editável estão em [der.svg](docs/diagramas/der.svg) e [der.dot](docs/diagramas/der.dot).

@@ -10,7 +10,14 @@ def run():
     db = SessionLocal()
     try:
         if db.scalar(select(Usuario).limit(1)):
-            print("Seed já aplicado; nenhum dado alterado.")
+            if not db.scalar(select(Usuario).where(Usuario.email == "atendente@raizes.local")):
+                db.add(Usuario(nome="Atendente Demonstração", email="atendente@raizes.local",
+                               senha_hash=hash_senha("Atendente@123"),
+                               perfil=Perfil.ATENDENTE.value, consentimento_fidelidade=False))
+                db.commit()
+                print("Conta de demonstração ATENDENTE adicionada.")
+            else:
+                print("Seed já aplicado; nenhum dado alterado.")
             return
         usuarios = [
             Usuario(nome="Cliente Demonstração", email="cliente@raizes.local", senha_hash=hash_senha("Cliente@123"), perfil=Perfil.CLIENTE.value, consentimento_fidelidade=True),
@@ -18,6 +25,9 @@ def run():
             Usuario(nome="Cozinha Demonstração", email="cozinha@raizes.local", senha_hash=hash_senha("Cozinha@123"), perfil=Perfil.COZINHA.value, consentimento_fidelidade=False),
             Usuario(nome="Admin Demonstração", email="admin@raizes.local", senha_hash=hash_senha("Admin@123"), perfil=Perfil.ADMIN.value, consentimento_fidelidade=False),
         ]
+        usuarios.append(Usuario(nome="Atendente Demonstração", email="atendente@raizes.local",
+                                senha_hash=hash_senha("Atendente@123"),
+                                perfil=Perfil.ATENDENTE.value, consentimento_fidelidade=False))
         db.add_all(usuarios)
         db.flush()
         db.add(Fidelidade(usuario_id=usuarios[0].id, pontos=20))
@@ -51,6 +61,7 @@ def run():
         print("gerente@raizes.local / Gerente@123")
         print("cozinha@raizes.local / Cozinha@123")
         print("admin@raizes.local / Admin@123")
+        print("atendente@raizes.local / Atendente@123")
     finally:
         db.close()
 
