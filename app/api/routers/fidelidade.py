@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.dependencies import exigir_perfis, usuario_atual
+from app.application.services import resgatar_pontos
 from app.domain.enums import Perfil
+from app.domain.schemas import ResgateFidelidadeEntrada
 from app.infrastructure.database import get_db
 from app.infrastructure.models import Auditoria, Fidelidade, Usuario
 
@@ -15,6 +17,11 @@ def saldo_fidelidade(usuario: Usuario = Depends(usuario_atual), db: Session = De
         return {"saldoPontos": 0, "consentimento": False, "message": "Usuário não aderiu ao programa de fidelização."}
     conta = db.scalar(select(Fidelidade).where(Fidelidade.usuario_id == usuario.id))
     return {"saldoPontos": conta.pontos if conta else 0, "consentimento": True}
+
+
+@router.post("/fidelidade/resgatar")
+def resgate_fidelidade(entrada: ResgateFidelidadeEntrada, usuario: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    return resgatar_pontos(db, usuario, entrada.pontos)
 
 
 @router.get("/auditoria")

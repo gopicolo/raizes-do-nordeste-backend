@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.dependencies import exigir_perfis, usuario_atual
-from app.application.audit import registrar_auditoria
-from app.application.services import carregar_pedido, criar_pedido
+from app.application.services import alterar_status_pedido, carregar_pedido, criar_pedido
 from app.domain.enums import CanalPedido, Perfil, StatusPedido
 from app.domain.schemas import PedidoCriacao, StatusPedidoEntrada
 from app.infrastructure.database import get_db
@@ -63,18 +62,21 @@ def obter_pedido(pedido_id: int, usuario: Usuario = Depends(usuario_atual), db: 
 
 
 @router.patch("/{pedido_id}/status")
-def atualizar_status(pedido_id: int, entrada: StatusPedidoEntrada, usuario: Usuario = Depends(exigir_perfis(Perfil.COZINHA.value, Perfil.GERENTE.value, Perfil.ADMIN.value)), db: Session = Depends(get_db)):
+def atualizar_status(pedido_id: int, entrada: StatusPedidoEntrada, usuario: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     pedido = carregar_pedido(db, pedido_id)
     if not pedido:
         raise HTTPException(status_code=404, detail={"error": "PEDIDO_NAO_ENCONTRADO", "message": "Pedido não encontrado.", "details": []})
-    permitidos = {
-        StatusPedido.PAGO.value: {StatusPedido.EM_PREPARO.value, StatusPedido.CANCELADO.value},
-        StatusPedido.EM_PREPARO.value: {StatusPedido.PRONTO.value, StatusPedido.CANCELADO.value},
-        StatusPedido.PRONTO.value: {StatusPedido.ENTREGUE.value},
-    }
-    if entrada.status.value not in permitidos.get(pedido.status, set()):
-        raise HTTPException(status_code=409, detail={"error": "TRANSICAO_STATUS_INVALIDA", "message": f"Não é permitido mudar de {pedido.status} para {entrada.status.value}.", "details": []})
-    pedido.status = entrada.status.value
-    registrar_auditoria(db, usuario.id, "ALTERAR_STATUS", "pedido", str(pedido.id), {"novoStatus": entrada.status.value})
-    db.commit()
-    return serializar(carregar_pedido(db, pedido.id))
+    equipe = {Perfil.COZINHA.value, Perfil.GERENTE.value, Perfil.ADMIN.value}
+    cancelar_proprio = (
+        usuario.perfil in {Perfil.CLIENTE.value, Perfil.ATENDENTE.value}
+        and pedido.cliente_id == usuario.id
+        and pedido.status == StatusPedido.AGUARDANDO_PAGAMENTO.value
+        and entrada.status == StatusPedido.CANCELADO
+    )
+    if usuario.perfil not in equipe and not cancelar_proprio:
+        raise HTTPException(status_code=403, detail={
+            "error": "SEM_PERMISSAO",
+            "message": "Você só pode cancelar seu próprio pedido enquanto aguarda pagamento.",
+            "details": [],
+        })
+    return serializar(alterar_status_pedido(db, pedido, entrada.status, usuario.id))
