@@ -126,3 +126,7 @@ class MovimentoEstoqueEntrada(BaseModel):
 class FidelidadeSaida(BaseModel):
     saldoPontos: int
     consentimento: bool
+
+
+class ResgateFidelidadeEntrada(BaseModel):
+    pontos: int = Field(gt=0, le=2147483647, strict=True)
