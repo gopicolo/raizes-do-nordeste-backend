@@ -1,0 +1,10 @@
+{
+  "name": "raizes-do-nordeste-validacao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runner da cole\u00e7\u00e3o Postman",
+  "devDependencies": {
+    "newman": "6.2.2",
+    "newman-reporter-htmlextra": "1.23.1"
+  }
+}
