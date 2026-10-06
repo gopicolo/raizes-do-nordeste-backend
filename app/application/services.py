@@ -76,6 +76,23 @@ def carregar_pedido(db: Session, pedido_id: int) -> Pedido | None:
 
 
 def processar_pagamento(db: Session, pedido: Pedido, resultado: StatusPagamento, usuario_id: int) -> Pagamento:
+    novo_status = (StatusPedido.PAGO if resultado == StatusPagamento.APROVADO
+                   else StatusPedido.PAGAMENTO_RECUSADO)
+    # Disputa a mesma transição que o cancelamento, antes de qualquer efeito.
+    transicao = db.execute(
+        update(Pedido)
+        .where(Pedido.id == pedido.id,
+               Pedido.status == StatusPedido.AGUARDANDO_PAGAMENTO.value)
+        .values(status=novo_status.value, updated_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    if transicao.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "error": "PEDIDO_NAO_AGUARDA_PAGAMENTO",
+            "message": "O pedido foi cancelado ou seu pagamento já foi processado.",
+            "details": [],
+        })
     pagamento = pedido.pagamento
     if pagamento is None:
         pagamento = Pagamento(pedido_id=pedido.id, provedor="MOCK")
@@ -85,24 +102,104 @@ def processar_pagamento(db: Session, pedido: Pedido, resultado: StatusPagamento,
     pagamento.payload_retorno = json.dumps({"resultado": resultado.value, "provedor": "MOCK"})
     pagamento.processado_em = datetime.now(timezone.utc)
     if resultado == StatusPagamento.APROVADO:
-        pedido.status = StatusPedido.PAGO.value
         cliente = db.get(Usuario, pedido.cliente_id)
         if cliente and cliente.consentimento_fidelidade:
             conta = db.scalar(select(Fidelidade).where(Fidelidade.usuario_id == cliente.id))
             if not conta:
                 conta = Fidelidade(usuario_id=cliente.id, pontos=0)
                 db.add(conta)
-            conta.pontos += int(Decimal(pedido.total) // Decimal("10"))
-            conta.atualizado_em = datetime.now(timezone.utc)
+                db.flush()
+            db.execute(
+                update(Fidelidade).where(Fidelidade.id == conta.id)
+                .values(pontos=Fidelidade.pontos + int(Decimal(pedido.total) // Decimal("10")),
+                        atualizado_em=datetime.now(timezone.utc))
+                .execution_options(synchronize_session=False)
+            )
     else:
-        pedido.status = StatusPedido.PAGAMENTO_RECUSADO.value
-        for item in pedido.itens:
-            estoque = db.scalar(select(Estoque).where(Estoque.unidade_id == pedido.unidade_id, Estoque.produto_id == item.produto_id))
-            if estoque:
-                estoque.quantidade += item.quantidade
-                estoque.atualizado_em = datetime.now(timezone.utc)
+        devolver_estoque(db, pedido)
     pedido.updated_at = datetime.now(timezone.utc)
     registrar_auditoria(db, usuario_id, "PROCESSAR_PAGAMENTO", "pedido", str(pedido.id), {"resultado": resultado.value})
     db.commit()
     db.refresh(pagamento)
     return pagamento
+
+
+def devolver_estoque(db: Session, pedido: Pedido) -> None:
+    for item in pedido.itens:
+        devolucao = db.execute(
+            update(Estoque)
+            .where(Estoque.unidade_id == pedido.unidade_id,
+                   Estoque.produto_id == item.produto_id)
+            .values(quantidade=Estoque.quantidade + item.quantidade,
+                    atualizado_em=datetime.now(timezone.utc))
+            .execution_options(synchronize_session=False)
+        )
+        if devolucao.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail={
+                "error": "ESTOQUE_NAO_ENCONTRADO",
+                "message": "Não foi possível devolver a reserva de estoque.",
+                "details": [],
+            })
+
+
+def alterar_status_pedido(db: Session, pedido: Pedido, status: StatusPedido,
+                         usuario_id: int) -> Pedido:
+    permitidos = {
+        StatusPedido.AGUARDANDO_PAGAMENTO.value: {StatusPedido.CANCELADO},
+        StatusPedido.PAGO.value: {StatusPedido.EM_PREPARO, StatusPedido.CANCELADO},
+        StatusPedido.EM_PREPARO.value: {StatusPedido.PRONTO, StatusPedido.CANCELADO},
+        StatusPedido.PRONTO.value: {StatusPedido.ENTREGUE},
+    }
+    anterior = pedido.status
+    if status not in permitidos.get(anterior, set()):
+        raise HTTPException(status_code=409, detail={
+            "error": "TRANSICAO_STATUS_INVALIDA",
+            "message": f"Não é permitido mudar de {anterior} para {status.value}.",
+            "details": [],
+        })
+    alteracao = db.execute(
+        update(Pedido).where(Pedido.id == pedido.id, Pedido.status == anterior)
+        .values(status=status.value, updated_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    if alteracao.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "error": "PEDIDO_ALTERADO",
+            "message": "O pedido foi alterado por outra operação. Consulte-o novamente.",
+            "details": [],
+        })
+    if status == StatusPedido.CANCELADO:
+        devolver_estoque(db, pedido)
+    registrar_auditoria(db, usuario_id, "ALTERAR_STATUS", "pedido", str(pedido.id),
+                       {"statusAnterior": anterior, "novoStatus": status.value})
+    db.commit()
+    return carregar_pedido(db, pedido.id)
+
+
+def resgatar_pontos(db: Session, usuario: Usuario, pontos: int) -> dict:
+    if not usuario.consentimento_fidelidade:
+        raise HTTPException(status_code=403, detail={
+            "error": "FIDELIDADE_SEM_CONSENTIMENTO",
+            "message": "É necessário aderir ao programa de fidelidade.",
+            "details": [],
+        })
+    debito = db.execute(
+        update(Fidelidade)
+        .where(Fidelidade.usuario_id == usuario.id, Fidelidade.pontos >= pontos)
+        .values(pontos=Fidelidade.pontos - pontos, atualizado_em=datetime.now(timezone.utc))
+        .returning(Fidelidade.pontos)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    if debito is None:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "error": "PONTOS_INSUFICIENTES",
+            "message": "Saldo de pontos insuficiente para o resgate.",
+            "details": [],
+        })
+    registrar_auditoria(db, usuario.id, "RESGATAR_PONTOS", "fidelidade", str(usuario.id),
+                       {"pontosResgatados": pontos, "saldoPontos": debito})
+    db.commit()
+    return {"pontosResgatados": pontos, "saldoPontos": debito}
