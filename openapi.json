@@ -606,6 +606,50 @@
         ]
       }
     },
+    "/fidelidade/resgatar": {
+      "post": {
+        "tags": [
+          "Fidelidade e Auditoria"
+        ],
+        "summary": "Resgate Fidelidade",
+        "operationId": "resgate_fidelidade_fidelidade_resgatar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResgateFidelidadeEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/auditoria": {
       "get": {
         "tags": [
@@ -767,6 +811,21 @@
           "itens"
         ],
         "title": "PedidoCriacao"
+      },
+      "ResgateFidelidadeEntrada": {
+        "properties": {
+          "pontos": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Pontos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pontos"
+        ],
+        "title": "ResgateFidelidadeEntrada"
       },
       "StatusPagamento": {
         "type": "string",
