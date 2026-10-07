@@ -1,0 +1,32 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.24, ranksep=0.8, label="Diagrama de Casos de Uso - Raízes do Nordeste", labelloc=t, fontsize=16];
+  node [fontname="DejaVu Sans", fontsize=11]; edge [fontname="DejaVu Sans", fontsize=9];
+  cliente [shape=box, label="Cliente\n(App / Web / Totem)"];
+  atendente [shape=box, label="Atendente\n(Balcão)"];
+  cozinha [shape=box, label="Cozinha"];
+  gerente [shape=box, label="Gerente / Administrador"];
+  gateway [shape=box, label="Gateway de Pagamento\n(Mock)"];
+  subgraph cluster_sistema {
+    label="API Raízes do Nordeste"; style=rounded;
+    login [shape=ellipse, label="Cadastrar / Autenticar"];
+    cardapio [shape=ellipse, label="Consultar cardápio\npor unidade"];
+    pedido [shape=ellipse, label="Realizar pedido"];
+    acompanhar [shape=ellipse, label="Consultar pedido / status"];
+    pagamento [shape=ellipse, label="Solicitar pagamento mock"];
+    status [shape=ellipse, label="Atualizar status do pedido"];
+    estoque [shape=ellipse, label="Consultar / movimentar estoque"];
+    fidelidade [shape=ellipse, label="Consultar fidelidade"];
+    cancelar [shape=ellipse, label="Cancelar pedido"];
+    resgatar [shape=ellipse, label="Resgatar pontos"];
+    promocoes [shape=ellipse, label="Consultar promoções"];
+    auditoria [shape=ellipse, label="Consultar auditoria"];
+  }
+  cliente -> login; cliente -> cardapio; cliente -> pedido; cliente -> acompanhar; cliente -> fidelidade;
+  atendente -> pedido; atendente -> acompanhar;
+  cozinha -> status;
+  gerente -> estoque; gerente -> status; gerente -> auditoria;
+  cliente -> pagamento; atendente -> pagamento;
+  cliente -> cancelar; atendente -> cancelar; cozinha -> cancelar; gerente -> cancelar;
+  cliente -> resgatar; cliente -> promocoes;
+  pagamento -> gateway [dir=both, label="request/response"];
+}
