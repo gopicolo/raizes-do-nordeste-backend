@@ -1,0 +1,23 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.3, nodesep=0.35, ranksep=0.7, label="Diagrama de Classes - Visão de Domínio", labelloc=t, fontsize=16];
+  node [shape=record, fontname="DejaVu Sans", fontsize=9]; edge [fontname="DejaVu Sans", fontsize=8];
+  Usuario [label="{Usuario|id: int\lnome: str\lemail: str\lperfil: Perfil\lconsentimentoFidelidade: bool\l}"];
+  Unidade [label="{Unidade|id: int\lnome: str\lcidade: str\luf: str\lcozinhaCompleta: bool\l}"];
+  Produto [label="{Produto|id: int\lnome: str\lpreco: decimal\lativo: bool\l}"];
+  Estoque [label="{Estoque|id: int\lquantidade: int\latualizadoEm: datetime\l}"];
+  Pedido [label="{Pedido|id: int\lcanalPedido: CanalPedido\lstatus: StatusPedido\ltotal: decimal\lcreatedAt: datetime\l}"];
+  ItemPedido [label="{ItemPedido|id: int\lquantidade: int\lprecoUnitario: decimal\l}"];
+  Pagamento [label="{Pagamento|id: int\lstatus: StatusPagamento\lprovedor: str\lreferenciaExterna: str\l}"];
+  Fidelidade [label="{Fidelidade|id: int\lpontos: int\l}"];
+  Auditoria [label="{Auditoria|id: int\lacao: str\lrecurso: str\ldetalhes: json\l}"];
+  Promocao [label="{Promocao|id: int\lnome: str\ldescricao: str\lpercentualDesconto: int\lativa: bool\l}"];
+  Usuario -> Pedido [label="1  realiza  N"];
+  Unidade -> Pedido [label="1  recebe  N"];
+  Unidade -> Estoque [label="1  possui  N"];
+  Produto -> Estoque [label="1  compõe  N"];
+  Pedido -> ItemPedido [label="1  possui  N"];
+  Produto -> ItemPedido [label="1  referencia  N"];
+  Pedido -> Pagamento [label="1  possui  0..1"];
+  Usuario -> Fidelidade [label="1  possui  0..1"];
+  Usuario -> Auditoria [label="1  gera  N"];
+}

@@ -705,6 +705,361 @@
           ]
         }
       ]
+    },
+    {
+      "name": "06 - Cancelamento e resgate (T16 e T17)",
+      "item": [
+        {
+          "name": "T16 - Estoque antes do pedido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              }
+            ],
+            "url": "{{baseUrl}}/estoque/unidades/1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"estoqueAntesCancelamento\", pm.response.json().find(x => x.produtoId === 1).quantidade);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Criar pedido aguardando pagamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/pedidos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unidadeId\": 1, \"canalPedido\": \"APP\", \"itens\": [{\"produtoId\": 1, \"quantidade\": 1}], \"formaPagamento\": \"MOCK\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.environment.set(\"pedidoCancelarId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Cancelar pedido próprio pendente",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/pedidos/{{pedidoCancelarId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\": \"CANCELADO\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Pedido cancelado\", () => { pm.expect(pm.response.json().status).to.eql(\"CANCELADO\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Conferir devolução de estoque",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              }
+            ],
+            "url": "{{baseUrl}}/estoque/unidades/1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Estoque devolvido\", () => { pm.expect(pm.response.json().find(x => x.produtoId === 1).quantidade).to.eql(Number(pm.environment.get(\"estoqueAntesCancelamento\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Impedir segundo cancelamento",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/pedidos/{{pedidoCancelarId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\": \"CANCELADO\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Impedir pagamento após cancelamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/pagamentos/{{pedidoCancelarId}}/processar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"resultado\": \"APROVADO\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T16 - Conferir ausência de devolução duplicada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              }
+            ],
+            "url": "{{baseUrl}}/estoque/unidades/1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Saldo permanece correto\", () => { pm.expect(pm.response.json().find(x => x.produtoId === 1).quantidade).to.eql(Number(pm.environment.get(\"estoqueAntesCancelamento\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T17 - Consultar saldo antes do resgate",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              }
+            ],
+            "url": "{{baseUrl}}/fidelidade/saldo"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"pontosAntesResgate\", pm.response.json().saldoPontos);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T17 - Resgatar um ponto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/fidelidade/resgatar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pontos\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Débito exato de um ponto\", () => { pm.expect(pm.response.json().pontosResgatados).to.eql(1); pm.expect(pm.response.json().saldoPontos).to.eql(Number(pm.environment.get(\"pontosAntesResgate\"))-1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T17 - Impedir resgate com saldo insuficiente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/fidelidade/resgatar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pontos\": 2147483647}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "T17 - Consultar saldo persistido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenCliente}}"
+              }
+            ],
+            "url": "{{baseUrl}}/fidelidade/saldo"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Saldo reduzido uma única vez\", () => { pm.expect(pm.response.json().saldoPontos).to.eql(Number(pm.environment.get(\"pontosAntesResgate\"))-1); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

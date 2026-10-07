@@ -169,6 +169,8 @@ A suíte contém **34 cenários** e cobre login, 401, 403, validação 422, cria
 3. Garanta que a API esteja rodando em `http://127.0.0.1:8000`.
 4. Execute a coleção na ordem apresentada. Requisições auxiliares gravam tokens e IDs nas variáveis do ambiente.
 
+A coleção inclui T16 (cancelamento com devolução única de estoque) e T17 (resgate com débito e proteção de saldo). A execução via Newman em 07/10/2026 concluiu 27 requisições e 32 verificações, sem falhas.
+
 ## Segurança e LGPD
 
 - Senhas são armazenadas com PBKDF2-HMAC-SHA256 e salt aleatório; senha em texto puro não é persistida.
@@ -182,7 +184,7 @@ A suíte contém **34 cenários** e cobre login, 401, 403, validação 422, cria
 
 ## Validação de carga e concorrência
 
-O teste executado em 05/10/2026 inclui 1.400 consultas (1, 5 e 20 clientes concorrentes) e 60 tentativas de pedido para 40 unidades em estoque. O resultado final foi 40 respostas 201, 20 respostas 409 e saldo zero. As leituras tiveram 100% de respostas HTTP 200. Trata-se de carga sintética local, não de capacidade certificada para produção.
+O teste executado em 07/10/2026 inclui 1.400 consultas (1, 5 e 20 clientes concorrentes) e 60 tentativas de pedido para 40 unidades em estoque. O resultado final foi 40 respostas 201, 20 respostas 409 e saldo zero. As leituras tiveram 100% de respostas HTTP 200. Trata-se de carga sintética local, não de capacidade certificada para produção.
 
 A reserva de estoque usa UPDATE atômico condicionado ao saldo, com rollback em caso de insuficiência. O teste automatizado adicional cobre itens repetidos no mesmo pedido.
 
@@ -205,3 +207,10 @@ python scripts/validar_projeto.py --postman
 ![DER do banco de dados](docs/diagramas/der.png)
 
 O diagrama mostra as tabelas, chaves e relacionamentos implementados. `?` indica campo opcional; a combinação `(unidade_id, produto_id)` é única em `estoques`. A tabela `promocoes` é independente no MVP. As versões vetorial e editável estão em [der.svg](docs/diagramas/der.svg) e [der.dot](docs/diagramas/der.dot).
+
+## Diagramas de casos de uso e classes
+
+- [Casos de uso](docs/diagramas/casos_de_uso.png): inclui cancelamento, resgate de pontos e consulta de promoções.
+- [Classes](docs/diagramas/classes.png): inclui `Promocao`, independente no MVP.
+
+As versões SVG e as fontes DOT estão na mesma pasta.

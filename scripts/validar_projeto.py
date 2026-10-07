@@ -47,7 +47,7 @@ def main():
                     if not cli.is_file():
                         raise RuntimeError('Execute npm install antes de usar --postman.')
                     with (evidencias / 'postman_execucao.txt').open('w', encoding='utf-8') as f:
-                        subprocess.run(['node', str(cli), 'run', 'postman_collection.json', '-e', 'postman_environment.json', '--env-var', 'baseUrl=' + base, '--reporters', 'cli,htmlextra', '--reporter-htmlextra-export', 'evidencias/postman_relatorio.html', '--reporter-htmlextra-skipSensitiveData', '--color', 'off'], stdout=f, stderr=subprocess.STDOUT, check=True)
+                        subprocess.run(['node', str(cli), 'run', 'postman_collection.json', '-e', 'postman_environment.json', '--env-var', 'baseUrl=' + base, '--reporters', 'cli,json,htmlextra', '--reporter-json-export', 'evidencias/postman_resultado.json', '--reporter-htmlextra-export', 'evidencias/postman_relatorio.html', '--reporter-htmlextra-skipSensitiveData', '--color', 'off'], stdout=f, stderr=subprocess.STDOUT, check=True)
                 with (evidencias / 'carga_execucao.txt').open('w', encoding='utf-8') as f:
                     subprocess.run([sys.executable, 'scripts/teste_carga.py', '--base-url', base], stdout=f, stderr=subprocess.STDOUT, check=True)
             finally:
